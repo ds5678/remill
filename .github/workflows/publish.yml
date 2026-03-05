@@ -48,12 +48,12 @@ jobs:
 
         - name: Build dependencies
           run: |
-            cmake -G Ninja -S dependencies -B dependencies/build -DUSE_EXTERNAL_LLVM=ON "-DCMAKE_PREFIX_PATH:PATH=$LLVM_PREFIX"
+            cmake -G Ninja -S dependencies -B dependencies/build -DUSE_EXTERNAL_LLVM=ON "-DCMAKE_PREFIX_PATH:PATH=$LLVM_PREFIX" -DCMAKE_BUILD_TYPE=Release
             cmake --build dependencies/build --config Release
 
         - name: Build remill
           run: |
-            cmake -G Ninja -B build "-DCMAKE_PREFIX_PATH:PATH=$PWD/dependencies/install" "-DCMAKE_INSTALL_PREFIX=$PWD/install"
+            cmake -G Ninja -B build "-DCMAKE_PREFIX_PATH:PATH=$PWD/dependencies/install" "-DCMAKE_INSTALL_PREFIX=$PWD/install" -DCMAKE_BUILD_TYPE=Release
             cmake --build build --config Release
 
         - name: Install remill
@@ -92,12 +92,12 @@ jobs:
 
         - name: Build dependencies
           run: |
-            cmake -G Ninja -S dependencies -B dependencies/build -DUSE_EXTERNAL_LLVM=ON "-DCMAKE_PREFIX_PATH:PATH=$LLVM_PREFIX"
+            cmake -G Ninja -S dependencies -B dependencies/build -DUSE_EXTERNAL_LLVM=ON "-DCMAKE_PREFIX_PATH:PATH=$LLVM_PREFIX" -DCMAKE_BUILD_TYPE=Release
             cmake --build dependencies/build --config Release
 
         - name: Build remill
           run: |
-            cmake -G Ninja -B build "-DCMAKE_PREFIX_PATH:PATH=$PWD/dependencies/install" "-DCMAKE_INSTALL_PREFIX=$PWD/install"
+            cmake -G Ninja -B build "-DCMAKE_PREFIX_PATH:PATH=$PWD/dependencies/install" "-DCMAKE_INSTALL_PREFIX=$PWD/install" -DCMAKE_BUILD_TYPE=Release
             cmake --build build --config Release
 
         - name: Install remill
@@ -161,14 +161,14 @@ jobs:
         - name: Build dependencies
           shell: pwsh
           run: |
-            cmake -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -S dependencies -B dependencies/build -DUSE_EXTERNAL_LLVM=ON "-DCMAKE_PREFIX_PATH:PATH=$env:LLVM_PREFIX"
+            cmake -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -S dependencies -B dependencies/build -DUSE_EXTERNAL_LLVM=ON "-DCMAKE_PREFIX_PATH:PATH=$env:LLVM_PREFIX" -DCMAKE_BUILD_TYPE=Release
             cmake --build dependencies/build --config Release
 
         - name: Build remill
           shell: pwsh
           run: |
             $cwd = (Get-Location).Path
-            cmake -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -B build "-DCMAKE_PREFIX_PATH:PATH=$cwd/dependencies/install" "-DCMAKE_INSTALL_PREFIX=$cwd/install"
+            cmake -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -B build "-DCMAKE_PREFIX_PATH:PATH=$cwd/dependencies/install" "-DCMAKE_INSTALL_PREFIX=$cwd/install" -DCMAKE_BUILD_TYPE=Release
             cmake --build build --config Release
 
         - name: Install remill
