@@ -49,7 +49,7 @@ else()
     interpreter mcjit
     nvptxdesc
     x86info x86codegen x86asmparser
-    sparccodegen sparcasmparser
+    # sparccodegen sparcasmparser
     webassemblydesc)
 endif()
 message(STATUS "LLVM Libraries: ${llvm_libs}")

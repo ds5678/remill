@@ -1,0 +1,194 @@
+name: Publish
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+env:
+  LLVM_VERSION: "21"
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    # We use a clean container to avoid LLVM conflicts on the GH runner images
+    container:
+      image: ubuntu:22.04
+    steps:
+        - name: Install LLVM and build tools
+          run: |
+            apt update
+            apt install --no-install-recommends -y \
+              lsb-release \
+              wget \
+              software-properties-common \
+              gnupg \
+              cmake \
+              ninja-build \
+              python-is-python3 \
+              python3-pip \
+              python3-setuptools \
+              python3-venv \
+              git
+            wget https://apt.llvm.org/llvm.sh
+            chmod +x llvm.sh
+            ./llvm.sh ${{ env.LLVM_VERSION }}
+            apt update
+            apt install --no-install-recommends -y \
+              llvm-${{ env.LLVM_VERSION }}-dev
+            echo "LLVM_PREFIX=$(llvm-config-${{ env.LLVM_VERSION }} --prefix)" >> $GITHUB_ENV
+            echo "CC=clang-${{ env.LLVM_VERSION }}" >> $GITHUB_ENV
+            echo "CXX=clang++-${{ env.LLVM_VERSION }}" >> $GITHUB_ENV
+
+        - name: Checkout
+          uses: actions/checkout@v5
+
+        - name: Add workspace as safe directory (necessary for docker)
+          run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+        - name: Build dependencies
+          run: |
+            cmake -G Ninja -S dependencies -B dependencies/build -DUSE_EXTERNAL_LLVM=ON "-DCMAKE_PREFIX_PATH:PATH=$LLVM_PREFIX"
+            cmake --build dependencies/build --config Release
+
+        - name: Build remill
+          run: |
+            cmake -G Ninja -B build "-DCMAKE_PREFIX_PATH:PATH=$PWD/dependencies/install" "-DCMAKE_INSTALL_PREFIX=$PWD/install"
+            cmake --build build --config Release
+
+        - name: Install remill
+          run: |
+            cmake --install build --config Release
+
+        - name: Copy LLVM to install
+          run: |
+            cp -r $LLVM_PREFIX/include ./install
+            cp -r $LLVM_PREFIX/lib ./install
+
+        - name: Copy dependencies to install and remove bin directory
+          run: |
+            cp -r ./dependencies/install/. ./install/
+            rm -rf ./install/bin
+
+        - name: Upload as artifact
+          uses: actions/upload-artifact@v7
+          with:
+            name: remill-linux
+            path: install
+
+  macos:
+    runs-on: macos-latest
+    steps:
+        - name: Install LLVM
+          run: |
+            brew install llvm@${{ env.LLVM_VERSION }}
+            LLVM_PREFIX=$(brew --prefix llvm@${{ env.LLVM_VERSION }})
+            echo "LLVM_PREFIX=$LLVM_PREFIX" >> $GITHUB_ENV
+            echo "CC=clang" >> $GITHUB_ENV
+            echo "CXX=clang++" >> $GITHUB_ENV
+
+        - name: Checkout
+          uses: actions/checkout@v5
+
+        - name: Build dependencies
+          run: |
+            cmake -G Ninja -S dependencies -B dependencies/build -DUSE_EXTERNAL_LLVM=ON "-DCMAKE_PREFIX_PATH:PATH=$LLVM_PREFIX"
+            cmake --build dependencies/build --config Release
+
+        - name: Build remill
+          run: |
+            cmake -G Ninja -B build "-DCMAKE_PREFIX_PATH:PATH=$PWD/dependencies/install" "-DCMAKE_INSTALL_PREFIX=$PWD/install"
+            cmake --build build --config Release
+
+        - name: Install remill
+          run: |
+            cmake --install build --config Release
+
+        - name: Copy LLVM to install
+          run: |
+            cp -r $LLVM_PREFIX/include ./install
+            cp -r $LLVM_PREFIX/lib ./install
+
+        - name: Copy dependencies to install and remove bin directory
+          run: |
+            # Delete ./dependencies/install/lib/cmake/llvm/LLVMConfig.cmake to avoid conflicts with the one from LLVM
+            rm -f ./dependencies/install/lib/cmake/llvm/LLVMConfig.cmake
+            cp -r ./dependencies/install/. ./install/
+            rm -rf ./install/bin
+
+        - name: Upload as artifact
+          uses: actions/upload-artifact@v7
+          with:
+            name: remill-macos
+            path: install
+  windows:
+    runs-on: windows-latest
+    steps:
+        - name: Checkout
+          uses: actions/checkout@v5
+
+        - name: Download and extract LLVM
+          id: download_llvm
+          shell: pwsh
+          run: |
+            $llvm_url = 'https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/clang+llvm-21.1.8-x86_64-pc-windows-msvc.tar.xz'
+            $tar_xz_dest = Join-Path $env:RUNNER_TEMP 'llvm.tar.xz'
+            $tar_dest = Join-Path $env:RUNNER_TEMP 'llvm.tar'
+            $llvm_extract_dest = Join-Path $env:RUNNER_TEMP 'llvm'
+            Write-Output "Downloading LLVM from $llvm_url to $tar_xz_dest"
+            Invoke-WebRequest -Uri $llvm_url -OutFile $tar_xz_dest -UseBasicParsing
+
+            7z x $tar_xz_dest -o"$env:RUNNER_TEMP" -y
+
+            # Print the contents of the temp directory to verify the extraction
+            Write-Output "Contents of $env:RUNNER_TEMP after extracting LLVM:"
+            Get-ChildItem -Path $env:RUNNER_TEMP
+
+            7z x $tar_dest -o"$llvm_extract_dest" -y
+
+            # Print the contents of the llvm directory to verify the extraction
+            Write-Output "Contents of $llvm_extract_dest after extracting LLVM:"
+            Get-ChildItem -Path $llvm_extract_dest
+            $llvm_dest = Join-Path $llvm_extract_dest 'clang+llvm-21.1.8-x86_64-pc-windows-msvc'
+            Write-Output "Contents of $llvm_dest after extracting LLVM:"
+            Get-ChildItem -Path $llvm_dest
+
+            # LLVM references the DIA SDK, but at the wrong path. We need to fix this up so that CMake can find it.
+            $llvm_exports_cmake_file = Join-Path $llvm_dest 'lib\cmake\llvm\LLVMExports.cmake'
+            (Get-Content $llvm_exports_cmake_file) -replace 'C:/Program Files \(x86\)/Microsoft Visual Studio/2019/Professional', 'C:/Program Files/Microsoft Visual Studio/2022/Enterprise' | Set-Content $llvm_exports_cmake_file
+
+            echo "LLVM_PREFIX=$llvm_dest" >> $env:GITHUB_ENV
+        - name: Build dependencies
+          shell: pwsh
+          run: |
+            cmake -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -S dependencies -B dependencies/build -DUSE_EXTERNAL_LLVM=ON "-DCMAKE_PREFIX_PATH:PATH=$env:LLVM_PREFIX"
+            cmake --build dependencies/build --config Release
+
+        - name: Build remill
+          shell: pwsh
+          run: |
+            $cwd = (Get-Location).Path
+            cmake -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -B build "-DCMAKE_PREFIX_PATH:PATH=$cwd/dependencies/install" "-DCMAKE_INSTALL_PREFIX=$cwd/install"
+            cmake --build build --config Release
+
+        - name: Install remill
+          shell: pwsh
+          run: cmake --install build --config Release
+
+        - name: Copy LLVM to install
+          shell: bash
+          run: |
+            cp -r $LLVM_PREFIX/include ./install
+            cp -r $LLVM_PREFIX/lib ./install
+
+        - name: Copy dependencies to install and remove bin directory
+          shell: bash
+          run: |
+            cp -r ./dependencies/install/. ./install/
+            rm -rf ./install/bin
+
+        - name: Upload as artifact
+          uses: actions/upload-artifact@v7
+          with:
+            name: remill-windows
+            path: install
