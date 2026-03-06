@@ -1,0 +1,39 @@
+name: Doxygen
+
+on:
+  push:
+    branches:
+      - automated-builds
+  workflow_dispatch:
+
+jobs:
+  build-docs:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            sudo apt update
+            sudo apt install --no-install-recommends -y doxygen graphviz
+          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+            brew update
+            brew install doxygen graphviz
+          else
+            choco install -y doxygen graphviz
+          fi
+        shell: bash
+
+      - name: Run Doxygen
+        run: doxygen
+
+      - name: Upload Doxygen pages
+        uses: actions/upload-artifact@v7
+        with:
+          name: doxygen-html-${{ matrix.os }}
+          path: docs/doxygen/html
