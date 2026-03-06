@@ -24,5 +24,5 @@ jobs:
       - name: Upload Doxygen pages
         uses: actions/upload-artifact@v7
         with:
-          name: doxygen-html-${{ matrix.os }}
+          name: doxygen-documentation
           path: docs/doxygen/html
